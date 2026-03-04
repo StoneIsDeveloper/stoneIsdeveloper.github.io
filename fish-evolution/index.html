@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>小鱼进化 - Fish Evolution</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a1628;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    #game-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #hud {
+      display: flex;
+      gap: 30px;
+      align-items: center;
+      padding: 8px 20px;
+      background: rgba(0,0,0,0.5);
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.1);
+      font-size: 14px;
+      width: 700px;
+      justify-content: space-between;
+    }
+
+    #hud .hud-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #hud .label { color: #aaa; }
+    #hud .value { color: #fff; font-weight: bold; font-size: 16px; }
+
+    #evo-bar-wrap {
+      flex: 1;
+      max-width: 200px;
+    }
+
+    #evo-bar-label {
+      font-size: 11px;
+      color: #aaa;
+      margin-bottom: 3px;
+      text-align: center;
+    }
+
+    #evo-bar-bg {
+      height: 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    #evo-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #00e5ff, #7c4dff);
+      border-radius: 4px;
+      transition: width 0.2s;
+      width: 0%;
+    }
+
+    canvas {
+      border-radius: 12px;
+      display: block;
+      cursor: none;
+      box-shadow: 0 0 40px rgba(0, 200, 255, 0.2);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      gap: 16px;
+    }
+
+    #overlay h1 {
+      font-size: 42px;
+      background: linear-gradient(90deg, #00e5ff, #7c4dff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: none;
+      letter-spacing: 4px;
+    }
+
+    #overlay p {
+      color: #ccc;
+      font-size: 15px;
+      text-align: center;
+      line-height: 1.8;
+      max-width: 400px;
+    }
+
+    #overlay .evo-preview {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 20px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    #overlay .evo-stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: #aaa;
+    }
+
+    #overlay .evo-stage canvas {
+      border: none;
+      box-shadow: none;
+      border-radius: 4px;
+      background: transparent;
+    }
+
+    #start-btn {
+      padding: 14px 50px;
+      font-size: 18px;
+      background: linear-gradient(90deg, #00b4d8, #7c4dff);
+      border: none;
+      border-radius: 30px;
+      color: #fff;
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: 2px;
+      transition: transform 0.1s, box-shadow 0.1s;
+      box-shadow: 0 4px 20px rgba(0, 180, 216, 0.4);
+    }
+
+    #start-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 30px rgba(0, 180, 216, 0.6);
+    }
+
+    #start-btn:active { transform: scale(0.98); }
+
+    #controls-hint {
+      font-size: 12px;
+      color: #555;
+      text-align: center;
+    }
+
+    #evo-announce {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      z-index: 20;
+      pointer-events: none;
+      text-align: center;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
+      opacity: 0;
+    }
+
+    #evo-announce.show {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+
+    #evo-announce .evo-title {
+      font-size: 36px;
+      font-weight: bold;
+      background: linear-gradient(90deg, #FFD700, #FF6B35);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 3px;
+    }
+
+    #evo-announce .evo-sub {
+      font-size: 18px;
+      color: #fff;
+      margin-top: 6px;
+      opacity: 0.9;
+    }
+
+    #gameover-score {
+      font-size: 24px;
+      color: #00e5ff;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+  <div id="hud">
+    <div class="hud-item">
+      <span class="label">进化阶段</span>
+      <span class="value" id="stage-name">小鱼苗</span>
+    </div>
+    <div class="hud-item" style="flex:1; justify-content:center;">
+      <div id="evo-bar-wrap">
+        <div id="evo-bar-label">进化进度</div>
+        <div id="evo-bar-bg"><div id="evo-bar"></div></div>
+      </div>
+    </div>
+    <div class="hud-item">
+      <span class="label">得分</span>
+      <span class="value" id="score-display">0</span>
+    </div>
+    <div class="hud-item">
+      <span class="label">最高</span>
+      <span class="value" id="best-display">0</span>
+    </div>
+  </div>
+  <canvas id="canvas" width="700" height="480"></canvas>
+</div>
+
+<div id="overlay">
+  <h1>🐟 小鱼进化</h1>
+  <p>移动鼠标（或触摸屏幕）控制小鱼<br>
+     吃掉比你小的鱼来成长<br>
+     躲避比你大的鱼<br>
+     进化成海洋霸主！</p>
+  <div class="evo-preview" id="evo-preview-row"></div>
+  <button id="start-btn">开始游戏</button>
+  <div id="controls-hint">支持鼠标 / 触摸操作</div>
+</div>
+
+<div id="evo-announce">
+  <div class="evo-title" id="evo-title-text"></div>
+  <div class="evo-sub" id="evo-sub-text"></div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// ─── Evolution Stages ───────────────────────────────────────────────────────
+const STAGES = [
+  { name: '小鱼苗',   emoji: '🐟', radius: 8,  speed: 4.2, color: '#7ecfff', threshold: 0    },
+  { name: '小鱼',     emoji: '🐡', radius: 12, speed: 3.8, color: '#5dd6b0', threshold: 30   },
+  { name: '中鱼',     emoji: '🐠', radius: 18, speed: 3.4, color: '#4db8e8', threshold: 90   },
+  { name: '大鱼',     emoji: '🦈', radius: 26, speed: 3.0, color: '#3d9fd4', threshold: 200  },
+  { name: '鲨鱼',     emoji: '🦈', radius: 36, speed: 2.6, color: '#2a7ab8', threshold: 380  },
+  { name: '巨鱼',     emoji: '🐋', radius: 50, speed: 2.2, color: '#1a4f8a', threshold: 650  },
+  { name: '海洋霸主', emoji: '🐳', radius: 68, speed: 1.9, color: '#0d2f6e', threshold: 1000 },
+];
+
+// ─── State ──────────────────────────────────────────────────────────────────
+let player, fishes, particles, score, best, stageIdx, gameRunning, raf;
+let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+let lastEvoAnnounce = -1;
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+function rand(a, b) { return a + Math.random() * (b - a); }
+function randInt(a, b) { return Math.floor(rand(a, b + 1)); }
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+function spawnFish() {
+  const side = randInt(0, 3);
+  let x, y, vx, vy;
+  const spd = rand(0.4, 2.2);
+  if (side === 0) { x = rand(0, canvas.width); y = -60; vx = rand(-0.5,0.5); vy = spd; }
+  else if (side === 1) { x = canvas.width + 60; y = rand(0, canvas.height); vx = -spd; vy = rand(-0.5,0.5); }
+  else if (side === 2) { x = rand(0, canvas.width); y = canvas.height + 60; vx = rand(-0.5,0.5); vy = -spd; }
+  else { x = -60; y = rand(0, canvas.height); vx = spd; vy = rand(-0.5,0.5); }
+
+  // Pick a random stage index for the NPC (weighted toward player stage)
+  const minS = Math.max(0, stageIdx - 2);
+  const maxS = Math.min(STAGES.length - 1, stageIdx + 2);
+  const si = randInt(minS, maxS);
+  const st = STAGES[si];
+
+  return {
+    x, y, vx, vy,
+    radius: st.radius * rand(0.75, 1.3),
+    stageIdx: si,
+    color: st.color,
+    alive: true,
+    angle: Math.atan2(vy, vx),
+    wobble: rand(0, Math.PI * 2),
+    wobbleSpeed: rand(0.04, 0.1),
+  };
+}
+
+function initGame() {
+  score = 0;
+  stageIdx = 0;
+  lastEvoAnnounce = -1;
+  player = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    radius: STAGES[0].radius,
+    angle: 0,
+    wobble: 0,
+    trail: [],
+  };
+  fishes = [];
+  particles = [];
+  for (let i = 0; i < 25; i++) fishes.push(spawnFish());
+}
+
+// ─── Drawing ────────────────────────────────────────────────────────────────
+function drawBackground() {
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, '#051428');
+  grad.addColorStop(1, '#0a2050');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Bubbles (static decoration)
+  ctx.save();
+  for (let i = 0; i < 30; i++) {
+    const bx = ((i * 137 + performance.now() * 0.02) % canvas.width);
+    const by = ((i * 97  + performance.now() * 0.03 * (i % 3 + 0.5)) % canvas.height);
+    ctx.globalAlpha = 0.07 + (i % 5) * 0.02;
+    ctx.beginPath();
+    ctx.arc(bx, by, 2 + (i % 4), 0, Math.PI * 2);
+    ctx.strokeStyle = '#7ecfff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Light rays
+  ctx.save();
+  ctx.globalAlpha = 0.04;
+  for (let i = 0; i < 5; i++) {
+    const rx = 80 + i * 140;
+    ctx.beginPath();
+    ctx.moveTo(rx, 0);
+    ctx.lineTo(rx - 40, canvas.height);
+    ctx.lineTo(rx + 40, canvas.height);
+    ctx.fillStyle = '#7ecfff';
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFishShape(cx, cy, r, angle, color, isPlayer) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+
+  const shimmer = isPlayer ? 1.0 : 0.85;
+
+  // Tail
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.9, 0);
+  ctx.lineTo(-r * 1.7, -r * 0.7);
+  ctx.lineTo(-r * 1.7,  r * 0.7);
+  ctx.closePath();
+  ctx.fillStyle = shadeColor(color, -20);
+  ctx.fill();
+
+  // Body gradient
+  const bodyGrad = ctx.createRadialGradient(-r * 0.1, -r * 0.2, r * 0.1, 0, 0, r * 1.1);
+  bodyGrad.addColorStop(0, lightenColor(color, 50));
+  bodyGrad.addColorStop(1, shadeColor(color, -30));
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r, r * 0.65, 0, 0, Math.PI * 2);
+  ctx.fillStyle = bodyGrad;
+  ctx.fill();
+
+  // Dorsal fin
+  ctx.beginPath();
+  ctx.moveTo(r * 0.1, -r * 0.65);
+  ctx.quadraticCurveTo(r * 0.4, -r * 1.1, r * 0.6, -r * 0.65);
+  ctx.fillStyle = shadeColor(color, -10);
+  ctx.fill();
+
+  // Eye
+  ctx.beginPath();
+  ctx.arc(r * 0.45, -r * 0.1, r * 0.18, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(r * 0.5, -r * 0.1, r * 0.1, 0, Math.PI * 2);
+  ctx.fillStyle = '#111';
+  ctx.fill();
+  // Eye shine
+  ctx.beginPath();
+  ctx.arc(r * 0.53, -r * 0.14, r * 0.04, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+
+  // Scales (player only for performance)
+  if (isPlayer && r > 14) {
+    ctx.globalAlpha = 0.15;
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 3; col++) {
+        const sx = -r * 0.3 + col * r * 0.35;
+        const sy = -r * 0.15 + row * r * 0.3;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r * 0.22, 0, Math.PI);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Player glow
+  if (isPlayer) {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 1.05, r * 0.68, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = lightenColor(color, 40);
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+}
+
+function shadeColor(hex, amt) {
+  let r = parseInt(hex.slice(1,3),16) + amt;
+  let g = parseInt(hex.slice(3,5),16) + amt;
+  let b = parseInt(hex.slice(5,7),16) + amt;
+  r = Math.max(0, Math.min(255, r));
+  g = Math.max(0, Math.min(255, g));
+  b = Math.max(0, Math.min(255, b));
+  return '#' + r.toString(16).padStart(2,'0') + g.toString(16).padStart(2,'0') + b.toString(16).padStart(2,'0');
+}
+
+function lightenColor(hex, amt) { return shadeColor(hex, amt); }
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.save();
+    ctx.globalAlpha = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * (p.life / p.maxLife), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ─── Update ─────────────────────────────────────────────────────────────────
+function updatePlayer() {
+  const st = STAGES[stageIdx];
+  const speed = st.speed;
+  const dx = mouse.x - player.x;
+  const dy = mouse.y - player.y;
+  const d = Math.hypot(dx, dy);
+  if (d > 2) {
+    player.x += (dx / d) * Math.min(d, speed) * 0.9;
+    player.y += (dy / d) * Math.min(d, speed) * 0.9;
+    player.angle = Math.atan2(dy, dx);
+  }
+  player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
+  player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+
+  // Trail
+  player.trail.unshift({ x: player.x, y: player.y });
+  if (player.trail.length > 12) player.trail.pop();
+}
+
+function updateFishes() {
+  for (const f of fishes) {
+    if (!f.alive) continue;
+    f.wobble += f.wobbleSpeed;
+
+    // NPC AI: flee from bigger player, chase smaller player
+    const d = dist(f, player);
+    const pRadius = player.radius;
+    if (d < 200) {
+      if (f.radius < pRadius * 0.9) {
+        // flee
+        const dx = f.x - player.x, dy = f.y - player.y;
+        const dd = Math.hypot(dx, dy) || 1;
+        f.vx += (dx / dd) * 0.18;
+        f.vy += (dy / dd) * 0.18;
+      } else if (f.radius > pRadius * 1.1) {
+        // chase
+        const dx = player.x - f.x, dy = player.y - f.y;
+        const dd = Math.hypot(dx, dy) || 1;
+        f.vx += (dx / dd) * 0.1;
+        f.vy += (dy / dd) * 0.1;
+      }
+    }
+
+    // Speed cap
+    const spd = Math.hypot(f.vx, f.vy);
+    const maxSpd = 2.5;
+    if (spd > maxSpd) { f.vx = (f.vx / spd) * maxSpd; f.vy = (f.vy / spd) * maxSpd; }
+
+    f.x += f.vx;
+    f.y += f.vy;
+    f.angle = Math.atan2(f.vy, f.vx);
+
+    // Wrap edges
+    if (f.x < -80) f.x = canvas.width + 80;
+    if (f.x > canvas.width + 80) f.x = -80;
+    if (f.y < -80) f.y = canvas.height + 80;
+    if (f.y > canvas.height + 80) f.y = -80;
+  }
+}
+
+function checkCollisions() {
+  const pR = player.radius;
+  for (const f of fishes) {
+    if (!f.alive) continue;
+    const d = dist(f, player);
+    if (d < pR + f.radius - 4) {
+      if (f.radius < pR * 0.88) {
+        // Eat!
+        f.alive = false;
+        const gained = Math.max(1, Math.round(f.radius / 4));
+        score += gained;
+        spawnEatParticles(f.x, f.y, f.color);
+        checkEvolution();
+      } else if (f.radius > pR * 1.12) {
+        // Eaten!
+        endGame();
+        return;
+      }
+    }
+  }
+  // Remove dead, maintain pool
+  fishes = fishes.filter(f => f.alive);
+  while (fishes.length < 28) fishes.push(spawnFish());
+}
+
+function spawnEatParticles(x, y, color) {
+  for (let i = 0; i < 10; i++) {
+    const angle = rand(0, Math.PI * 2);
+    const spd = rand(1, 4);
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * spd,
+      vy: Math.sin(angle) * spd,
+      r: rand(2, 5),
+      life: 35,
+      maxLife: 35,
+      color,
+    });
+  }
+}
+
+function updateParticles() {
+  for (const p of particles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx *= 0.92;
+    p.vy *= 0.92;
+    p.life--;
+  }
+  particles = particles.filter(p => p.life > 0);
+}
+
+function checkEvolution() {
+  for (let i = STAGES.length - 1; i >= 0; i--) {
+    if (score >= STAGES[i].threshold) {
+      if (i !== stageIdx) {
+        stageIdx = i;
+        player.radius = STAGES[i].radius;
+        showEvoAnnounce(STAGES[i]);
+        // Big particle burst
+        for (let k = 0; k < 30; k++) {
+          const angle = rand(0, Math.PI * 2);
+          const spd = rand(2, 7);
+          particles.push({
+            x: player.x, y: player.y,
+            vx: Math.cos(angle) * spd,
+            vy: Math.sin(angle) * spd,
+            r: rand(3, 8),
+            life: 60,
+            maxLife: 60,
+            color: STAGES[i].color,
+          });
+        }
+      }
+      break;
+    }
+  }
+  updateHUD();
+}
+
+function showEvoAnnounce(stage) {
+  const el = document.getElementById('evo-announce');
+  document.getElementById('evo-title-text').textContent = `✨ 进化！${stage.emoji}`;
+  document.getElementById('evo-sub-text').textContent = stage.name;
+  el.classList.add('show');
+  clearTimeout(window._evoTimer);
+  window._evoTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function updateHUD() {
+  document.getElementById('stage-name').textContent = STAGES[stageIdx].emoji + ' ' + STAGES[stageIdx].name;
+  document.getElementById('score-display').textContent = score;
+  if (score > best) {
+    best = score;
+    document.getElementById('best-display').textContent = best;
+    try { localStorage.setItem('fishEvoTop', best); } catch(e){}
+  }
+
+  // Evo bar
+  const cur = STAGES[stageIdx].threshold;
+  const nxt = stageIdx < STAGES.length - 1 ? STAGES[stageIdx + 1].threshold : cur + 100;
+  const pct = stageIdx === STAGES.length - 1 ? 100 : Math.min(100, ((score - cur) / (nxt - cur)) * 100);
+  document.getElementById('evo-bar').style.width = pct + '%';
+}
+
+// ─── Main Loop ───────────────────────────────────────────────────────────────
+function loop() {
+  if (!gameRunning) return;
+
+  drawBackground();
+
+  // Draw trail
+  for (let i = player.trail.length - 1; i >= 0; i--) {
+    const t = player.trail[i];
+    ctx.globalAlpha = ((player.trail.length - i) / player.trail.length) * 0.18;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, player.radius * 0.6, 0, Math.PI * 2);
+    ctx.fillStyle = STAGES[stageIdx].color;
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  drawParticles();
+
+  // Draw NPC fishes
+  for (const f of fishes) {
+    if (!f.alive) continue;
+    drawFishShape(f.x, f.y, f.radius, f.angle + Math.sin(f.wobble) * 0.15, f.color, false);
+  }
+
+  // Draw player
+  drawFishShape(player.x, player.y, player.radius, player.angle, STAGES[stageIdx].color, true);
+
+  updatePlayer();
+  updateFishes();
+  checkCollisions();
+  updateParticles();
+
+  raf = requestAnimationFrame(loop);
+}
+
+// ─── Game Over ────────────────────────────────────────────────────────────────
+function endGame() {
+  gameRunning = false;
+  cancelAnimationFrame(raf);
+
+  const overlay = document.getElementById('overlay');
+  overlay.innerHTML = `
+    <h1>游戏结束</h1>
+    <p>你被大鱼吃掉了！</p>
+    <div id="gameover-score">得分: ${score} &nbsp;|&nbsp; 阶段: ${STAGES[stageIdx].emoji} ${STAGES[stageIdx].name}</div>
+    <p style="color:#888">历史最高: ${best}</p>
+    <button id="start-btn" onclick="startGame()">再来一局</button>
+  `;
+  overlay.style.display = 'flex';
+}
+
+// ─── Input ───────────────────────────────────────────────────────────────────
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = e.clientX - rect.left;
+  mouse.y = e.clientY - rect.top;
+});
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const t = e.touches[0];
+  mouse.x = t.clientX - rect.left;
+  mouse.y = t.clientY - rect.top;
+}, { passive: false });
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const t = e.touches[0];
+  mouse.x = t.clientX - rect.left;
+  mouse.y = t.clientY - rect.top;
+}, { passive: false });
+
+// ─── Start ───────────────────────────────────────────────────────────────────
+function startGame() {
+  document.getElementById('overlay').style.display = 'none';
+  initGame();
+  updateHUD();
+  gameRunning = true;
+  loop();
+}
+
+// Load best
+try { best = parseInt(localStorage.getItem('fishEvoTop')) || 0; } catch(e) { best = 0; }
+document.getElementById('best-display').textContent = best;
+
+// Build evo preview
+(function buildEvoPreview() {
+  const row = document.getElementById('evo-preview-row');
+  row.innerHTML = '';
+  STAGES.forEach((st, i) => {
+    const div = document.createElement('div');
+    div.className = 'evo-stage';
+    div.innerHTML = `<span style="font-size:22px">${st.emoji}</span><span>${st.name}</span>`;
+    row.appendChild(div);
+    if (i < STAGES.length - 1) {
+      const arrow = document.createElement('span');
+      arrow.textContent = '→';
+      arrow.style.color = '#444';
+      arrow.style.fontSize = '18px';
+      row.appendChild(arrow);
+    }
+  });
+})();
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+</script>
+</body>
+</html>
