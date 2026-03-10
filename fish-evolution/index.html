@@ -331,12 +331,12 @@ function drawBackground() {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Bubbles (scrolling upward)
+  // Bubbles - fixed positions scrolling upward with scrollY
   ctx.save();
   for (let i = 0; i < 30; i++) {
-    const bx = ((i * 137 + performance.now() * 0.02) % canvas.width);
-    const rawY = (i * 97 + performance.now() * 0.03 * (i % 3 + 0.5) - scrollY * (0.5 + (i % 3) * 0.3));
-    const by = ((rawY % canvas.height) + canvas.height) % canvas.height;
+    const bx = (i * 251 + (i % 5) * 83) % canvas.width;
+    const speed = 0.6 + (i % 4) * 0.25;
+    const by = ((i * (canvas.height / 30) * 3.1 - scrollY * speed) % canvas.height + canvas.height) % canvas.height;
     ctx.globalAlpha = 0.07 + (i % 5) * 0.02;
     ctx.beginPath();
     ctx.arc(bx, by, 2 + (i % 4), 0, Math.PI * 2);
@@ -346,18 +346,35 @@ function drawBackground() {
   }
   ctx.restore();
 
-  // Light rays (slow parallax)
+  // Light rays - seamless vertical scroll
   ctx.save();
-  ctx.globalAlpha = 0.04;
-  const rayOff = (scrollY * 0.2) % canvas.height;
+  ctx.globalAlpha = 0.05;
+  ctx.fillStyle = '#7ecfff';
+  const rayScroll = scrollY * 0.6 % canvas.height;
   for (let i = 0; i < 5; i++) {
     const rx = 80 + i * 140;
+    for (let rep = 0; rep < 2; rep++) {
+      const yOff = rep * canvas.height - rayScroll;
+      ctx.beginPath();
+      ctx.moveTo(rx, yOff);
+      ctx.lineTo(rx - 40, yOff + canvas.height);
+      ctx.lineTo(rx + 40, yOff + canvas.height);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+
+  // Horizontal current lines scrolling upward
+  ctx.save();
+  ctx.strokeStyle = '#3a7bd5';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 6; i++) {
+    const y = ((i * (canvas.height / 6) - scrollY * 1.8) % canvas.height + canvas.height) % canvas.height;
+    ctx.globalAlpha = 0.04 + (i % 3) * 0.02;
     ctx.beginPath();
-    ctx.moveTo(rx, -rayOff);
-    ctx.lineTo(rx - 40, canvas.height - rayOff);
-    ctx.lineTo(rx + 40, canvas.height - rayOff);
-    ctx.fillStyle = '#7ecfff';
-    ctx.fill();
+    ctx.moveTo(30 + (i % 3) * 20, y);
+    ctx.lineTo(canvas.width - 30 - (i % 3) * 20, y + 8);
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -534,15 +551,15 @@ function checkCollisions() {
     if (!f.alive) continue;
     const d = dist(f, player);
     if (d < pR + f.radius - 4) {
-      if (f.radius < pR * 0.88) {
-        // Eat!
+      if (f.radius <= pR * 1.05) {
+        // Eat! 同等级及更小的鱼都可以吃
         f.alive = false;
         const gained = Math.max(1, Math.round(f.radius / 4));
         score += gained;
         spawnEatParticles(f.x, f.y, f.color);
         checkEvolution();
-      } else if (f.radius > pR * 1.12) {
-        // Eaten!
+      } else if (f.radius > pR * 1.3) {
+        // Eaten! 只有明显更大的鱼才危险
         endGame();
         return;
       }
