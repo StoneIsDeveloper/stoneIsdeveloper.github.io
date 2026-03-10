@@ -268,6 +268,43 @@ let lastEvoAnnounce = -1;
 let scrollY = 0;
 const SCROLL_SPEED = 0.4;
 
+// ─── Virtual Joystick ────────────────────────────────────────────────────────
+const JOY = {
+  baseX: 80, baseY: canvas.height - 80,
+  baseR: 52, stickR: 24, maxR: 36,
+  active: false, touchId: null,
+  offX: 0, offY: 0,
+};
+
+function joyCanvasCoords(touch) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (touch.clientX - rect.left) * (canvas.width / rect.width),
+    y: (touch.clientY - rect.top)  * (canvas.height / rect.height),
+  };
+}
+
+function drawJoystick() {
+  ctx.save();
+  // Base ring
+  ctx.globalAlpha = 0.25;
+  ctx.beginPath();
+  ctx.arc(JOY.baseX, JOY.baseY, JOY.baseR, 0, Math.PI * 2);
+  ctx.strokeStyle = '#7ecfff';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.globalAlpha = 0.08;
+  ctx.fillStyle = '#7ecfff';
+  ctx.fill();
+  // Stick
+  ctx.globalAlpha = JOY.active ? 0.55 : 0.25;
+  ctx.beginPath();
+  ctx.arc(JOY.baseX + JOY.offX, JOY.baseY + JOY.offY, JOY.stickR, 0, Math.PI * 2);
+  ctx.fillStyle = '#7ecfff';
+  ctx.fill();
+  ctx.restore();
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function rand(a, b) { return a + Math.random() * (b - a); }
 function randInt(a, b) { return Math.floor(rand(a, b + 1)); }
@@ -488,8 +525,15 @@ function drawParticles() {
 function updatePlayer() {
   const st = STAGES[stageIdx];
   const speed = st.speed;
-  const dx = mouse.x - player.x;
-  const dy = mouse.y - player.y;
+  let tx = mouse.x, ty = mouse.y;
+  // Joystick overrides mouse when active
+  if (JOY.active && (JOY.offX !== 0 || JOY.offY !== 0)) {
+    const len = Math.hypot(JOY.offX, JOY.offY);
+    tx = player.x + (JOY.offX / len) * 9999;
+    ty = player.y + (JOY.offY / len) * 9999;
+  }
+  const dx = tx - player.x;
+  const dy = ty - player.y;
   const d = Math.hypot(dx, dy);
   if (d > 2) {
     player.x += (dx / d) * Math.min(d, speed) * 0.9;
@@ -679,6 +723,8 @@ function loop() {
   // Draw player
   drawFishShape(player.x, player.y, player.radius, player.angle, STAGES[stageIdx].color, true);
 
+  drawJoystick();
+
   updatePlayer();
   updateFishes();
   checkCollisions();
@@ -710,20 +756,43 @@ canvas.addEventListener('mousemove', e => {
   mouse.y = e.clientY - rect.top;
 });
 
-canvas.addEventListener('touchmove', e => {
-  e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  const t = e.touches[0];
-  mouse.x = t.clientX - rect.left;
-  mouse.y = t.clientY - rect.top;
-}, { passive: false });
-
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  const t = e.touches[0];
-  mouse.x = t.clientX - rect.left;
-  mouse.y = t.clientY - rect.top;
+  for (const t of e.changedTouches) {
+    const { x, y } = joyCanvasCoords(t);
+    const dj = Math.hypot(x - JOY.baseX, y - JOY.baseY);
+    if (!JOY.active && dj < JOY.baseR + 24) {
+      JOY.active = true; JOY.touchId = t.identifier;
+      JOY.offX = 0; JOY.offY = 0;
+    } else if (t.identifier !== JOY.touchId) {
+      mouse.x = x; mouse.y = y;
+    }
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    const { x, y } = joyCanvasCoords(t);
+    if (t.identifier === JOY.touchId) {
+      let ox = x - JOY.baseX, oy = y - JOY.baseY;
+      const len = Math.hypot(ox, oy);
+      if (len > JOY.maxR) { ox = ox / len * JOY.maxR; oy = oy / len * JOY.maxR; }
+      JOY.offX = ox; JOY.offY = oy;
+    } else {
+      mouse.x = x; mouse.y = y;
+    }
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === JOY.touchId) {
+      JOY.active = false; JOY.touchId = null;
+      JOY.offX = 0; JOY.offY = 0;
+    }
+  }
 }, { passive: false });
 
 // ─── Start ───────────────────────────────────────────────────────────────────
