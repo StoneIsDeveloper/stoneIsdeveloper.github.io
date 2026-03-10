@@ -265,13 +265,15 @@ const STAGES = [
 let player, fishes, particles, score, best, stageIdx, gameRunning, raf;
 let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
 let lastEvoAnnounce = -1;
+let scrollY = 0;
+const SCROLL_SPEED = 0.4;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function rand(a, b) { return a + Math.random() * (b - a); }
 function randInt(a, b) { return Math.floor(rand(a, b + 1)); }
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
-function spawnFish() {
+function spawnFishForStage(forceMaxStage) {
   const side = randInt(0, 3);
   let x, y, vx, vy;
   const spd = rand(0.4, 2.2);
@@ -280,9 +282,9 @@ function spawnFish() {
   else if (side === 2) { x = rand(0, canvas.width); y = canvas.height + 60; vx = rand(-0.5,0.5); vy = -spd; }
   else { x = -60; y = rand(0, canvas.height); vx = spd; vy = rand(-0.5,0.5); }
 
-  // Pick a random stage index for the NPC (weighted toward player stage)
+  const maxAllowed = forceMaxStage !== undefined ? forceMaxStage : Math.min(STAGES.length - 1, stageIdx + 2);
   const minS = Math.max(0, stageIdx - 2);
-  const maxS = Math.min(STAGES.length - 1, stageIdx + 2);
+  const maxS = Math.min(STAGES.length - 1, maxAllowed);
   const si = randInt(minS, maxS);
   const st = STAGES[si];
 
@@ -298,10 +300,15 @@ function spawnFish() {
   };
 }
 
+function spawnFish() {
+  return spawnFishForStage(undefined);
+}
+
 function initGame() {
   score = 0;
   stageIdx = 0;
   lastEvoAnnounce = -1;
+  scrollY = 0;
   player = {
     x: canvas.width / 2,
     y: canvas.height / 2,
@@ -312,7 +319,8 @@ function initGame() {
   };
   fishes = [];
   particles = [];
-  for (let i = 0; i < 25; i++) fishes.push(spawnFish());
+  // 初始只生成少量小鱼，避免开始就被围攻
+  for (let i = 0; i < 8; i++) fishes.push(spawnFishForStage(0));
 }
 
 // ─── Drawing ────────────────────────────────────────────────────────────────
@@ -323,11 +331,12 @@ function drawBackground() {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Bubbles (static decoration)
+  // Bubbles (scrolling upward)
   ctx.save();
   for (let i = 0; i < 30; i++) {
     const bx = ((i * 137 + performance.now() * 0.02) % canvas.width);
-    const by = ((i * 97  + performance.now() * 0.03 * (i % 3 + 0.5)) % canvas.height);
+    const rawY = (i * 97 + performance.now() * 0.03 * (i % 3 + 0.5) - scrollY * (0.5 + (i % 3) * 0.3));
+    const by = ((rawY % canvas.height) + canvas.height) % canvas.height;
     ctx.globalAlpha = 0.07 + (i % 5) * 0.02;
     ctx.beginPath();
     ctx.arc(bx, by, 2 + (i % 4), 0, Math.PI * 2);
@@ -337,15 +346,16 @@ function drawBackground() {
   }
   ctx.restore();
 
-  // Light rays
+  // Light rays (slow parallax)
   ctx.save();
   ctx.globalAlpha = 0.04;
+  const rayOff = (scrollY * 0.2) % canvas.height;
   for (let i = 0; i < 5; i++) {
     const rx = 80 + i * 140;
     ctx.beginPath();
-    ctx.moveTo(rx, 0);
-    ctx.lineTo(rx - 40, canvas.height);
-    ctx.lineTo(rx + 40, canvas.height);
+    ctx.moveTo(rx, -rayOff);
+    ctx.lineTo(rx - 40, canvas.height - rayOff);
+    ctx.lineTo(rx + 40, canvas.height - rayOff);
     ctx.fillStyle = '#7ecfff';
     ctx.fill();
   }
@@ -507,7 +517,7 @@ function updateFishes() {
     if (spd > maxSpd) { f.vx = (f.vx / spd) * maxSpd; f.vy = (f.vy / spd) * maxSpd; }
 
     f.x += f.vx;
-    f.y += f.vy;
+    f.y += f.vy - SCROLL_SPEED; // 随世界向上滚动
     f.angle = Math.atan2(f.vy, f.vx);
 
     // Wrap edges
@@ -540,7 +550,7 @@ function checkCollisions() {
   }
   // Remove dead, maintain pool
   fishes = fishes.filter(f => f.alive);
-  while (fishes.length < 28) fishes.push(spawnFish());
+  while (fishes.length < 15) fishes.push(spawnFish());
 }
 
 function spawnEatParticles(x, y, color) {
@@ -627,6 +637,7 @@ function updateHUD() {
 function loop() {
   if (!gameRunning) return;
 
+  scrollY += SCROLL_SPEED;
   drawBackground();
 
   // Draw trail
@@ -701,6 +712,9 @@ canvas.addEventListener('touchstart', e => {
 // ─── Start ───────────────────────────────────────────────────────────────────
 function startGame() {
   document.getElementById('overlay').style.display = 'none';
+  // 重置鼠标到画布中心，防止游戏开始时鱼冲向按钮位置
+  mouse.x = canvas.width / 2;
+  mouse.y = canvas.height / 2;
   initGame();
   updateHUD();
   gameRunning = true;
