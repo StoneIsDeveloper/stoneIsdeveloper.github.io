@@ -287,20 +287,33 @@ function joyCanvasCoords(touch) {
 function drawJoystick() {
   ctx.save();
   // Base ring
-  ctx.globalAlpha = 0.25;
+  ctx.globalAlpha = 0.45;
   ctx.beginPath();
   ctx.arc(JOY.baseX, JOY.baseY, JOY.baseR, 0, Math.PI * 2);
   ctx.strokeStyle = '#7ecfff';
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 3;
   ctx.stroke();
-  ctx.globalAlpha = 0.08;
+  ctx.globalAlpha = 0.18;
   ctx.fillStyle = '#7ecfff';
   ctx.fill();
+  // Direction arrows
+  ctx.globalAlpha = 0.3;
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.5;
+  for (const [ax, ay] of [[0,-1],[0,1],[-1,0],[1,0]]) {
+    const r1 = JOY.baseR * 0.45, r2 = JOY.baseR * 0.72;
+    ctx.beginPath();
+    ctx.moveTo(JOY.baseX + ax * r1, JOY.baseY + ay * r1);
+    ctx.lineTo(JOY.baseX + ax * r2, JOY.baseY + ay * r2);
+    ctx.stroke();
+  }
   // Stick
-  ctx.globalAlpha = JOY.active ? 0.55 : 0.25;
+  ctx.globalAlpha = JOY.active ? 0.8 : 0.5;
   ctx.beginPath();
   ctx.arc(JOY.baseX + JOY.offX, JOY.baseY + JOY.offY, JOY.stickR, 0, Math.PI * 2);
   ctx.fillStyle = '#7ecfff';
+  ctx.shadowColor = '#7ecfff';
+  ctx.shadowBlur = JOY.active ? 12 : 0;
   ctx.fill();
   ctx.restore();
 }
@@ -525,20 +538,27 @@ function drawParticles() {
 function updatePlayer() {
   const st = STAGES[stageIdx];
   const speed = st.speed;
-  let tx = mouse.x, ty = mouse.y;
-  // Joystick overrides mouse when active
+
   if (JOY.active && (JOY.offX !== 0 || JOY.offY !== 0)) {
-    const len = Math.hypot(JOY.offX, JOY.offY);
-    tx = player.x + (JOY.offX / len) * 9999;
-    ty = player.y + (JOY.offY / len) * 9999;
-  }
-  const dx = tx - player.x;
-  const dy = ty - player.y;
-  const d = Math.hypot(dx, dy);
-  if (d > 2) {
-    player.x += (dx / d) * Math.min(d, speed) * 0.9;
-    player.y += (dy / d) * Math.min(d, speed) * 0.9;
-    player.angle = Math.atan2(dy, dx);
+    // Joystick: steer toward joystick direction, speed proportional to displacement
+    const targetAngle = Math.atan2(JOY.offY, JOY.offX);
+    let da = targetAngle - player.angle;
+    while (da >  Math.PI) da -= 2 * Math.PI;
+    while (da < -Math.PI) da += 2 * Math.PI;
+    player.angle += da * 0.15;
+    const mag = Math.min(Math.hypot(JOY.offX, JOY.offY) / JOY.maxR, 1);
+    player.x += Math.cos(player.angle) * speed * mag;
+    player.y += Math.sin(player.angle) * speed * mag;
+  } else {
+    // Desktop: follow mouse
+    const dx = mouse.x - player.x;
+    const dy = mouse.y - player.y;
+    const d = Math.hypot(dx, dy);
+    if (d > 2) {
+      player.x += (dx / d) * Math.min(d, speed) * 0.9;
+      player.y += (dy / d) * Math.min(d, speed) * 0.9;
+      player.angle = Math.atan2(dy, dx);
+    }
   }
   player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
   player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
