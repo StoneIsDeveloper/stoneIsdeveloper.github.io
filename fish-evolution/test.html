@@ -58,62 +58,63 @@ const joy={ox:0,oy:0,dx:0,dy:0,on:false};
 let ptr={x:0,y:0,on:false};
 
 // ===== MUSIC =====
-let audioCtx=null,masterGain=null,musicOn=true,melodyTimer=null;
+let audioCtx=null,masterGain=null,musicOn=true;
 
 function startMusic(){
   if(!musicOn)return;
-  // Resume if already created but suspended
   if(audioCtx){audioCtx.resume();return;}
   try{
     audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-    audioCtx.resume(); // Required by modern browsers even after user gesture
+    audioCtx.resume();
     masterGain=audioCtx.createGain();
-    masterGain.gain.value=0.35;
+    masterGain.gain.value=0.7;
     masterGain.connect(audioCtx.destination);
 
-    // Delay for echo/reverb feel
-    const delay=audioCtx.createDelay(2);
-    delay.delayTime.value=0.45;
-    const delayFB=audioCtx.createGain();delayFB.gain.value=0.38;
-    const delayGain=audioCtx.createGain();delayGain.gain.value=0.28;
-    delay.connect(delayFB);delayFB.connect(delay);
-    delay.connect(delayGain);delayGain.connect(masterGain);
+    // Build a noise buffer (3 seconds, looped)
+    function mkNoise(sec){
+      const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*sec,audioCtx.sampleRate);
+      const d=buf.getChannelData(0);
+      for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+      return buf;
+    }
 
-    // Low drone pads
-    [[55,0.40,0.06],[82.5,0.25,0.04],[110,0.18,0.03]].forEach(([f,v,lv])=>{
-      const o=audioCtx.createOscillator(),g=audioCtx.createGain();
-      const lfo=audioCtx.createOscillator(),lg=audioCtx.createGain();
-      o.type='sine';o.frequency.value=f;g.gain.value=v;
-      lfo.frequency.value=0.04+Math.random()*0.06;lg.gain.value=f*lv;
-      lfo.connect(lg);lg.connect(o.frequency);
-      o.connect(g);g.connect(masterGain);
-      o.start();lfo.start();
-    });
+    // One wave layer: noise → bandpass filter → gain (with two LFOs)
+    function mkWave(filterHz, filterQ, sweepRate, sweepDepth, waveRate, vol){
+      const src=audioCtx.createBufferSource();
+      src.buffer=mkNoise(4); src.loop=true;
 
-    scheduleMelody(delay);
+      const bp=audioCtx.createBiquadFilter();
+      bp.type='bandpass'; bp.frequency.value=filterHz; bp.Q.value=filterQ;
+
+      // LFO sweeps filter freq (gives "whoosh" movement)
+      const sweepLFO=audioCtx.createOscillator();
+      const sweepGain=audioCtx.createGain();
+      sweepLFO.frequency.value=sweepRate; sweepGain.gain.value=sweepDepth;
+      sweepLFO.connect(sweepGain); sweepGain.connect(bp.frequency);
+      sweepLFO.start();
+
+      const g=audioCtx.createGain(); g.gain.value=vol;
+
+      // LFO pulses volume (gives wave rhythm: swell → recede)
+      const waveLFO=audioCtx.createOscillator();
+      const waveGain=audioCtx.createGain();
+      waveLFO.type='sine'; waveLFO.frequency.value=waveRate;
+      waveGain.gain.value=vol*0.6;
+      waveLFO.connect(waveGain); waveGain.connect(g.gain);
+      waveLFO.start();
+
+      src.connect(bp); bp.connect(g); g.connect(masterGain);
+      src.start();
+    }
+
+    // Layer 1: main wave body — low mid, slow swell (~8s per wave)
+    mkWave(320, 1.2, 0.09, 180, 0.12, 0.55);
+    // Layer 2: surface spray — higher freq, slightly faster
+    mkWave(900, 0.8, 0.14, 380, 0.17, 0.22);
+    // Layer 3: deep underwater rumble — very low, very slow
+    mkWave(110, 0.6, 0.04, 55,  0.07, 0.40);
+
   }catch(e){console.warn('Audio init failed:',e);}
-}
-
-// A minor pentatonic (A C D E G) across two octaves
-const MNOTES=[220,261.63,293.66,329.63,392,440,523.25,587.33,659.25,784];
-function scheduleMelody(delayNode){
-  if(!audioCtx||!musicOn)return;
-  const now=audioCtx.currentTime;
-  const freq=MNOTES[Math.floor(Math.random()*MNOTES.length)];
-  const dur=1.8+Math.random()*2.5;
-  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
-  const filt=audioCtx.createBiquadFilter();
-  o.type=Math.random()<0.6?'sine':'triangle';
-  o.frequency.value=freq;
-  filt.type='lowpass';filt.frequency.value=900+Math.random()*400;
-  g.gain.setValueAtTime(0,now);
-  g.gain.linearRampToValueAtTime(0.07+Math.random()*0.04,now+0.4);
-  g.gain.linearRampToValueAtTime(0,now+dur);
-  o.connect(filt);filt.connect(g);g.connect(masterGain);
-  if(delayNode)g.connect(delayNode);
-  o.start(now);o.stop(now+dur+0.1);
-  const next=(800+Math.random()*2200);
-  melodyTimer=setTimeout(()=>scheduleMelody(delayNode),next);
 }
 
 function stopMusic(){
