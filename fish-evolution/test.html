@@ -644,13 +644,20 @@ if(state==='dead')drawDead(t);
 
 // Joystick (floating, appears at touch position)
 if(joy.on&&state==='play'){
-X.save();X.globalAlpha=0.18;
-X.strokeStyle='#FFF';X.lineWidth=1.5;
+X.save();
+// Base ring
+X.globalAlpha=0.35;
+X.strokeStyle='rgba(150,220,255,0.9)';X.lineWidth=2;
 X.beginPath();X.arc(joy.ox,joy.oy,45,0,6.28);X.stroke();
-X.globalAlpha=0.3;X.fillStyle='#FFF';
+X.globalAlpha=0.08;X.fillStyle='#7ecfff';
+X.beginPath();X.arc(joy.ox,joy.oy,45,0,6.28);X.fill();
+// Stick
 const jx=joy.ox+Math.max(-35,Math.min(35,joy.dx));
 const jy=joy.oy+Math.max(-35,Math.min(35,joy.dy));
-X.beginPath();X.arc(jx,jy,15,0,6.28);X.fill();
+X.globalAlpha=0.7;X.fillStyle='rgba(150,220,255,0.9)';
+X.shadowColor='#7ecfff';X.shadowBlur=10;
+X.beginPath();X.arc(jx,jy,16,0,6.28);X.fill();
+X.shadowBlur=0;
 X.restore();
 }
 }
